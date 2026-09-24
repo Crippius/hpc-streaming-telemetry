@@ -1,0 +1,37 @@
+# Single source of truth for what gets replayed.
+
+raw_dir: data/raw
+long_dir: data/long
+
+time_range:
+  start: "2021-04-03T00:00:00Z"
+  end: "2021-05-01T00:00:00Z" # exclusive
+
+# Must be a subset of the 56 metrics present on every node
+metrics:
+  - total_power
+  - p0_power
+  - p1_power
+  - p0_mem_power
+  - p0_io_power
+  - ambient
+  - pcie
+  - fan0_0
+  - gpu0_core_temp
+  - gpu0_mem_temp
+  - gv100card0
+  - dimm0_temp
+
+stats: [avg, std, min, max]
+
+# To fill later
+nodes: []
+
+kafka:
+  bootstrap_servers: localhost:9092
+  schema_registry_url: http://localhost:8081
+  topic: node-metrics
+  anomaly_topic: anomaly-events
+
+replay:
+  windows_per_sec: 20 # 0 = as fast as possible

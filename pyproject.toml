@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hpc-streaming-telemetry"
+version = "0.1.0"
+description = "Kafka + Spark Structured Streaming replay of Marconi100 HPC telemetry with an online CapyMOA anomaly detector"
+requires-python = ">=3.12"
+dependencies = [
+    "capymoa~=0.14",
+    "confluent-kafka[avro,schemaregistry]>=2.5",
+    "pandas~=2.2",
+    "pyarrow>=17",
+    "psycopg[binary]~=3.2",
+    "pyyaml~=6.0",
+]
+
+[project.optional-dependencies]
+spark = ["pyspark==3.5.*"]
+dev = ["hpc-streaming-telemetry[spark]", "pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+include = ["producer*", "streaming*", "scripts*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

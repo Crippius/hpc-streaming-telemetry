@@ -1,0 +1,14 @@
+data/
+
+# Spark
+checkpoints/
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/

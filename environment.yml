@@ -1,0 +1,9 @@
+name: hpc-stream
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - openjdk=17
+  - pip
+  - pip:
+      - -e .[dev]
