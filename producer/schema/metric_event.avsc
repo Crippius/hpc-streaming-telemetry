@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "MetricEvent",
+  "namespace": "hpc.telemetry",
+  "doc": "One aggregated IPMI statistic of one M100 node over one 15-minute window.",
+  "fields": [
+    { "name": "node_id", "type": "string" },
+    {
+      "name": "event_time",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "original M100 timestamp"
+    },
+    { "name": "metric", "type": "string" },
+    { "name": "stat", "type": "string" },
+    { "name": "value", "type": ["null", "double"], "default": null },
+    {
+      "name": "nagios_state",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Raw Nagios state: 0 ok, 2 critical, 3 unknown; null = unmonitored."
+    },
+    {
+      "name": "is_anomaly",
+      "type": ["null", "boolean"],
+      "default": null,
+      "doc": "nagios_state in (2, 3); null when unmonitored."
+    }
+  ]
+}
