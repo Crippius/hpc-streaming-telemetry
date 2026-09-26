@@ -49,3 +49,56 @@ services:
       test: curl -fs http://localhost:8081/subjects
       interval: 5s
       retries: 20
+
+  timescaledb:
+    image: timescale/timescaledb:2.30.1-pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: telemetry
+      POSTGRES_DB: telemetry
+    volumes:
+      - ./sink/init_timescale.sql:/docker-entrypoint-initdb.d/init_timescale.sql:ro
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U telemetry -d telemetry
+      interval: 5s
+      retries: 20
+
+  spark:
+    build:
+      context: .
+      dockerfile: streaming/Dockerfile.spark
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      schema-registry:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "4040:4040"
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      PG_DSN: postgresql://telemetry:telemetry@timescaledb:5432/telemetry
+      CHECKPOINT_DIR: /checkpoints/spark_agg
+      CONFIG: /app/config.yaml
+    volumes:
+      - ./streaming:/app/streaming:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - spark-checkpoints:/checkpoints
+      - spark-ivy:/opt/ivy
+    working_dir: /app
+    command: >
+      /opt/spark/bin/spark-submit --master local[*] --driver-memory 4g
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.9,org.apache.spark:spark-avro_2.12:3.5.9
+      --conf spark.jars.ivy=/opt/ivy
+      --conf spark.sql.shuffle.partitions=8
+      streaming/spark_windowed_agg.py
+
+volumes:
+  timescale-data:
+  spark-checkpoints:
+  spark-ivy:
