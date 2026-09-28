@@ -19,3 +19,20 @@ CREATE TABLE IF NOT EXISTS metric_agg_1h (
 
 SELECT create_hypertable('metric_agg_1h', by_range('window_start', INTERVAL '7 days'),
                          if_not_exists => TRUE);
+
+CREATE TABLE IF NOT EXISTS anomaly_scores (
+    detector          text             NOT NULL,
+    node_id           text             NOT NULL,
+    event_time        timestamptz      NOT NULL,
+    score             double precision,
+    threshold         double precision,
+    flagged           boolean          NOT NULL,
+    nagios_state      integer,
+    is_anomaly        boolean,
+    last_publish_time timestamptz,
+    scored_at         timestamptz      NOT NULL,
+    PRIMARY KEY (detector, node_id, event_time)
+);
+
+SELECT create_hypertable('anomaly_scores', by_range('event_time', INTERVAL '7 days'),
+                         if_not_exists => TRUE);

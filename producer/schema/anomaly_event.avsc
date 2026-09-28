@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "AnomalyEvent",
+  "namespace": "hpc.telemetry",
+  "doc": "A node-window flagged by an online detector.",
+  "fields": [
+    { "name": "detector", "type": "string" },
+    { "name": "node_id", "type": "string" },
+    { "name": "event_time", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "score", "type": "double" },
+    { "name": "threshold", "type": ["null", "double"], "default": null },
+    { "name": "detected_at", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

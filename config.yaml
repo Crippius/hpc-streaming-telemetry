@@ -85,3 +85,31 @@ kafka:
 
 replay:
   windows_per_sec: 20 # 0 = as fast as possible
+
+detection:
+  burn_in_windows: 192 # first 2 days excluded from evaluation
+  validation_end: "2020-06-23T00:00:00Z"
+  detectors:
+    capymoa_hst:
+      {
+        kind: capymoa,
+        algorithm: HalfSpaceTrees,
+        window_size: 96,
+        number_of_trees: 10,
+        max_depth: 8,
+      }
+    river_hst: { kind: river_hst, window_size: 96 }
+    capymoa_hst_peer:
+      {
+        kind: capymoa,
+        algorithm: HalfSpaceTrees,
+        window_size: 96,
+        number_of_trees: 10,
+        max_depth: 8,
+        peer_relative: true,
+      }
+    river_hst_peer: { kind: river_hst, window_size: 96, peer_relative: true }
+    relative_entropy: { kind: relative_entropy, window: 16, bins: 5, k: 2 }
+    pearson_peer: { kind: pearson_peer, window: 16, k: 4 }
+    nagios_persistence: { kind: nagios_persistence }
+    nagios_oracle: { kind: nagios_oracle }
