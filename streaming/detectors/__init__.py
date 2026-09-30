@@ -1,3 +1,4 @@
+from streaming.detectors.anticipation import OnlineAnticipation, RetrainedAnticipation
 from streaming.detectors.base import Detector, PeerRelative
 from streaming.detectors.hst import CapyMOA, RiverHST
 from streaming.detectors.nagios import NagiosOracle, NagiosPersistence
@@ -10,6 +11,8 @@ KINDS: dict[str, type[Detector]] = {
     "pearson_peer": PearsonPeer,
     "nagios_persistence": NagiosPersistence,
     "nagios_oracle": NagiosOracle,
+    "anticipation": OnlineAnticipation,
+    "anticipation_gbt": RetrainedAnticipation,
 }
 
 

@@ -113,3 +113,11 @@ detection:
     pearson_peer: { kind: pearson_peer, window: 16, k: 4 }
     nagios_persistence: { kind: nagios_persistence }
     nagios_oracle: { kind: nagios_oracle }
+    anticipation_arf: { kind: anticipation, horizon: 4, model: river_arf }
+    anticipation_hat: { kind: anticipation, horizon: 4, model: river_hat }
+    anticipation_capymoa: { kind: anticipation, horizon: 4, model: capymoa_arf }
+    anticipation_gbt_none: { kind: anticipation_gbt, horizon: 4, retrain: none }
+    anticipation_gbt_periodic: { kind: anticipation_gbt, horizon: 4, retrain: periodic, every: 2688 }
+    anticipation_gbt_optwin: { kind: anticipation_gbt, horizon: 4, retrain: drift, drift: optwin, min_gap: 672 }
+    anticipation_gbt_adwin: { kind: anticipation_gbt, horizon: 4, retrain: drift, drift: adwin, min_gap: 672 }
+    anticipation_gbt_ddm: { kind: anticipation_gbt, horizon: 4, retrain: drift, drift: ddm, min_gap: 672 }

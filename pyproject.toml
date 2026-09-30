@@ -20,6 +20,8 @@ dependencies = [
 
 [project.optional-dependencies]
 spark = ["pyspark==3.5.*"]
+# CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
+lstm = ["torch>=2.4"]
 dev = ["hpc-streaming-telemetry[spark]", "pytest>=8", "ruff>=0.6"]
 
 [tool.setuptools.packages.find]
