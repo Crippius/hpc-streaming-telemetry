@@ -98,6 +98,22 @@ services:
       --conf spark.sql.shuffle.partitions=8
       streaming/spark_windowed_agg.py
 
+  grafana:
+    image: grafana/grafana-oss:12.4.3
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/grafana_dashboard.json
+    volumes:
+      - ./dashboards/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   timescale-data:
   spark-checkpoints:

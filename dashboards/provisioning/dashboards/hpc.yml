@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: hpc-telemetry
+    folder: HPC telemetry
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
