@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import tarfile
 from pathlib import Path
 
@@ -8,7 +9,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_config(path: Path = ROOT / "config.yaml") -> dict:
+def load_config(path: Path | None = None) -> dict:
+    """config.yaml, or the file named by $HPC_CONFIG (used by CI)."""
+    path = path or Path(os.environ.get("HPC_CONFIG", ROOT / "config.yaml"))
     with open(path) as f:
         cfg = yaml.safe_load(f)
     for key in ("raw_dir", "long_dir"):

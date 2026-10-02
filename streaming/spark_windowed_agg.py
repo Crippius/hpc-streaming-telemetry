@@ -121,18 +121,18 @@ def main() -> None:
         .start()
     )
     print(f"streaming {topic} (schema id {schema_id}) -> metric_agg_1h", flush=True)
-    last = None
+    last = -1
     while query.isActive:
         time.sleep(10)
-        p = query.lastProgress
-        if p and p["batchId"] != last:
-            last = p["batchId"]
-            print(
-                f"batch {p['batchId']}: {p['numInputRows']} rows, "
-                f"{p['durationMs'].get('triggerExecution', 0)} ms, "
-                f"watermark {p['eventTime'].get('watermark')}",
-                flush=True,
-            )
+        for p in query.recentProgress:  # every batch since the last poll, not just the newest
+            if p["batchId"] > last:
+                last = p["batchId"]
+                print(
+                    f"batch {p['batchId']}: {p['numInputRows']} rows, "
+                    f"{p['durationMs'].get('triggerExecution', 0)} ms, "
+                    f"watermark {p['eventTime'].get('watermark')}",
+                    flush=True,
+                )
     query.awaitTermination()
 
 

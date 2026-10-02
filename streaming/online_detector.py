@@ -158,7 +158,11 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--detectors", default=",".join(det_cfg), help=f"subset of {list(det_cfg)}")
     p.add_argument("--group", default="anomaly-detector")
-    p.add_argument("--exit-when-idle", type=float, help="stop after N idle seconds (batch runs)")
+    p.add_argument(
+        "--exit-when-idle",
+        type=float,
+        help="stop after N idle seconds, counted from the first message (batch runs)",
+    )
     p.add_argument("--pg-dsn", default="postgresql://telemetry:telemetry@localhost:5432/telemetry")
     args = p.parse_args()
 
@@ -189,6 +193,7 @@ def main() -> None:
 
     rows, flagged_total, vectors_total = [], 0, 0
     last_flush = last_msg = last_log = time.monotonic()
+    seen_any = False
 
     def process(ready_list):
         nonlocal flagged_total, vectors_total
@@ -226,8 +231,8 @@ def main() -> None:
                 reasm.add(deserialize(m.value(), in_ctx), m.timestamp()[1], now)
             process(reasm.release(now))
             if msgs:
-                last_msg = now
-            elif args.exit_when_idle and now - last_msg > args.exit_when_idle:
+                last_msg, seen_any = now, True
+            elif args.exit_when_idle and seen_any and now - last_msg > args.exit_when_idle:
                 break
             if len(rows) > 20_000 or now - last_flush > 2:
                 flush()
