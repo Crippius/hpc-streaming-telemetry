@@ -1,0 +1,41 @@
+# Synthetic 3-node, 1-day setup for the CI smoke test (scripts/make_fixture.py).
+raw_dir: data/raw
+long_dir: data/ci_long
+time_range:
+  start: '2020-06-14T00:00:00Z'
+  end: '2020-06-15T00:00:00Z'
+metrics:
+- total_power
+- p0_power
+- p1_power
+- p0_mem_power
+- p0_io_power
+- ambient
+- pcie
+- fan0_0
+- gpu0_core_temp
+- gpu0_mem_temp
+- gv100card0
+- dimm0_temp
+stats:
+- avg
+- std
+- min
+- max
+nodes:
+- '900'
+- '901'
+- '902'
+kafka:
+  bootstrap_servers: localhost:9092
+  schema_registry_url: http://localhost:8081
+  topic: node-metrics
+  anomaly_topic: anomaly-events
+replay:
+  windows_per_sec: 0
+detection:
+  burn_in_windows: 0
+  validation_end: '2020-06-14T12:00:00Z'
+  detectors:
+    nagios_persistence:
+      kind: nagios_persistence
