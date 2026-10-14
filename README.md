@@ -48,8 +48,8 @@ The label comes from the Nagios alerting system.
 ## Main results
 
 - **Pipeline:** 74k messages/s, results in TimescaleDB 3.3 s after publish (median) with no lost or duplicated windows after killing and restarting Spark.
-- **Unsupervised detection:** weak. The best detector reaches 0.59 per-node AUC.
-- **Drain anticipation, 1 hour ahead:** **0.72 per-node AUC** in the stream, retrained every 4 weeks on delayed Nagios labels.
+- **Drained nodes are mostly idle, but idle nodes are rarely drained:** one feature chosen on training data reaches 0.82 AUC with about 20% precision. A supervised model reaches 0.88 AUC but only 33% precision, while the best generic unsupervised detector gets 0.59 AUC.
+- **Drain anticipation, 1 hour ahead:** the streaming model's AUC is close to the best single-feature rule (0.72 vs 0.72), but it needs about 4× fewer false alerts at the same recall (1.2 vs 4.9 per node-day at 25% recall).
 
 ## Run it
 

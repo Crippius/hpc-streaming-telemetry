@@ -1,5 +1,7 @@
 data/
 
+benchmarks/
+
 # Spark
 checkpoints/
 spark-warehouse/
@@ -12,3 +14,14 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+
+# LaTeX
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.pdf
+report/*.gz

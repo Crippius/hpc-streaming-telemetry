@@ -1,5 +1,4 @@
-"""Second consumer of node-metrics: rebuild per-node feature vectors, score them with pluggable
-online detectors, write every score to TimescaleDB and flagged ones to the anomaly-events topic."""
+"""Online detector service: per-node vectors from the stream, scored by pluggable detectors."""
 
 import argparse
 import time

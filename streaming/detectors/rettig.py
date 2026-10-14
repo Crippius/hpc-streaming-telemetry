@@ -1,5 +1,4 @@
-"""Relative entropy and Pearson correlation detectors after Rettig et al., IEEE BigData 2015,
-adapted from categorical event counts to numeric per-node telemetry."""
+"""Relative entropy and Pearson detectors after Rettig et al. (IEEE BigData 2015)."""
 
 from collections import defaultdict, deque
 

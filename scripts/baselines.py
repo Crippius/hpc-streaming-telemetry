@@ -33,6 +33,21 @@ def idle_level(P: np.ndarray, mask: np.ndarray) -> np.ndarray:
     )
 
 
+def select_rule(X, feats, y, mask):
+    """Best single feature and sign by mean per-node ROC-AUC over `mask` (training windows only)."""
+    nodes = [i for i in range(len(y)) if 0 < y[i][mask[i]].sum() < mask[i].sum()]
+    best = (None, 0.0, 1)
+    for j, name in enumerate(feats):
+        M = np.asarray(X[:, :, j], dtype=np.float32)
+        a = float(np.mean([roc_auc_score(y[i][mask[i]], M[i][mask[i]]) for i in nodes]))
+        for sign, auc in ((1, a), (-1, 1 - a)):
+            if auc > best[1]:
+                best = (name, auc, sign)
+    name, _, sign = best
+    sym = "+" if sign == 1 else "-"
+    return f"{sym}{name}", sign * np.asarray(X[:, :, feats.index(name)], dtype=np.float32)
+
+
 def best_threshold(y: np.ndarray, s: np.ndarray) -> float:
     p, r, thr = precision_recall_curve(y, s)
     f1 = 2 * p[:-1] * r[:-1] / np.maximum(p[:-1] + r[:-1], 1e-12)
@@ -73,6 +88,37 @@ def paired(a: np.ndarray, b: np.ndarray, n_boot: int = 2000, seed: int = 1) -> d
     }
 
 
+def operating_ci(y, node, rule, cands, recall=0.25, n_boot=500, seed=1) -> dict:
+    """Alerts per node-day at a fixed recall for the rule and each model, with a paired
+    bootstrap CI over nodes of (rule - model). Rows must be grouped by node."""
+    bounds = np.flatnonzero(np.r_[True, node[1:] != node[:-1], True])
+    spans = list(zip(bounds[:-1], bounds[1:], strict=True))
+    rng = np.random.default_rng(seed)
+
+    def alerts(sc, yy):
+        pos = sc[yy]
+        k = len(pos) - int(np.ceil(recall * len(pos)))
+        return 96 * float((sc >= np.partition(pos, k)[k]).mean())
+
+    full = {"rule": alerts(rule, y), **{n: alerts(s, y) for n, s in cands.items()}}
+    diffs = {n: [] for n in cands}
+    for _ in range(n_boot):
+        draw = rng.integers(0, len(spans), len(spans))
+        idx = np.concatenate([np.arange(*spans[i]) for i in draw])
+        yy, base = y[idx], alerts(rule[idx], y[idx])
+        for n, s in cands.items():
+            diffs[n].append(base - alerts(s[idx], yy))
+    out = {}
+    for n in cands:
+        lo, hi = np.percentile(diffs[n], [2.5, 97.5])
+        out[n] = {
+            "rule": full["rule"],
+            "model": full[n],
+            "rule - model [95% CI]": f"{full['rule'] - full[n]:+.2f} [{lo:+.2f}, {hi:+.2f}]",
+        }
+    return out
+
+
 def node_aucs(y: np.ndarray, score: np.ndarray, test: np.ndarray) -> np.ndarray:
     """Per-node ROC-AUC over a (nodes x windows) mask; NaN where a node lacks a class."""
     return np.array([
@@ -94,7 +140,7 @@ def stored_matrix(cfg, ctx, name: str) -> np.ndarray:
     return np.where(np.isnan(S), np.nanmin(S) - 1, S)
 
 
-def fit_gbt(ctx, t_lo, t_hi, groups, rng):
+def fit_gbt(ctx, t_lo, t_hi, groups, rng, seed=0):
     """GBT for the *current* label (detection ceiling), trained on windows [t_lo, t_hi)."""
     mon = ctx["valid"] & ctx["present"]
     args = (ctx["X"], ctx["cluster"], ctx["rack_med"], ctx["racks"], ctx["anom"], ctx["grid"])
@@ -106,7 +152,7 @@ def fit_gbt(ctx, t_lo, t_hi, groups, rng):
         if len(t):
             Xs.append(node_features(i, t, *args, groups))
             ys.append(ctx["anom"][i, t])
-    model = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, random_state=0)
+    model = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, random_state=seed)
     model.fit(np.vstack(Xs), np.concatenate(ys))
     S = np.full(ctx["anom"].shape, np.nan, np.float32)
     for i in range(len(ctx["nodes"])):
@@ -161,12 +207,16 @@ def main() -> None:
     val[:, t_split:] = False
     test = mon.copy()
     test[:, :t_split] = False
-    idle_det = idle_level(P, mon & (np.arange(P.shape[1]) < t_split)[None, :])
+    before_split = mon & (np.arange(P.shape[1]) < t_split)[None, :]
+    idle_det = idle_level(P, before_split)
+    rule_name, R_det = select_rule(X, feats, anom, before_split)
+    print("selected detection rule:", rule_name, flush=True)
     base = anom[test].mean()
     S_gbt = fit_gbt(ctx, 0, t_fit, ["telemetry", "peers"], rng)
     # fit_gbt predicts windows >= t_fit; the test mask only uses windows >= t_split
     scores = {
-        "low power (-power)": -P,
+        f"best single feature, chosen on training windows ({rule_name})": R_det,
+        "low power (-power), hand-picked": -P,
         "low power relative to the node's idle level": -(P / idle_det[:, None]),
         "power below the cluster median": -(P - cluster_p[None, :]),
         "supervised GBT, all telemetry + peers (ceiling)": S_gbt,
@@ -184,8 +234,8 @@ def main() -> None:
     for name, s in scores.items():
         det[name] = detection_row(anom, np.nan_to_num(s, nan=-1e9), val, test)
         print("detection", name, det[name], flush=True)
-    paired_rows = {}
-    rule_auc = node_aucs(anom, -P, test)
+    paired_rows, operating_rows = {}, {}
+    rule_auc = node_aucs(anom, R_det, test)
     detection_models = {name: s for name, s in scores.items() if name.startswith("supervised")}
     for name in ["capymoa_hst", "river_hst", "capymoa_hst_peer", "river_hst_peer",
                  "relative_entropy", "pearson_peer"]:  # fmt: skip
@@ -217,10 +267,15 @@ def main() -> None:
         keep[:, :test0] = False
         node, t = np.nonzero(keep)
         y, cwt = fut[node, t], cw[t]
+        sel_mask = keep_tr.copy()
+        sel_mask[:, test0 - fw :] = False
+        rule_h, R_h = select_rule(X, feats, fut, sel_mask)
+        print(f"selected anticipation rule ({h}):", rule_h, flush=True)
         S_po = power_only_gbt(P4, fut, keep_tr, test0, fw, rng)
         cand = {
             "always OK (constant score)": np.zeros(len(y)),
-            "low power (-power)": -P[node, t],
+            f"best single feature, chosen on training rows ({rule_h})": R_h[node, t],
+            "low power (-power), hand-picked": -P[node, t],
             "low power relative to the node's idle level": -(P[node, t] / idle_ant[node]),
             "power drop over 6 h": -(P[node, t] - P[node, np.maximum(t - 24, 0)]),
             "GBT on power only (4 stats + 1 h / 6 h changes)": S_po[node, t],
@@ -246,19 +301,22 @@ def main() -> None:
             assert np.array_equal(d["y"], y), "saved model scores are misaligned with the rows"
             models[label] = d["s"]
         ns = ~(y & cwt)
-        rule = -P[node, t]
+        rule = R_h[node, t]
         streaming = {}
         if h == "1 h":
             for pol in ["none", "periodic", "adwin", "ddm", "optwin"]:
                 M = stored_matrix(cfg, ctx, f"anticipation_gbt_{pol}")
                 streaming[f"streaming GBT, retrain: {pol}"] = M[node, t]
-        for label, sc in {**{f"offline {k}": v for k, v in models.items()}, **streaming}.items():
+        cands = {**{f"offline {k}": v for k, v in models.items()}, **streaming}
+        for label, sc in cands.items():
             both = paired(per_node_aucs(y, sc, node), per_node_aucs(y, rule, node))
             only = paired(
                 per_node_aucs(y[ns], sc[ns], node[ns]), per_node_aucs(y[ns], rule[ns], node[ns])
             )
             paired_rows[(f"anticipation {h}", label, "all onsets")] = both
             paired_rows[(f"anticipation {h}", label, "node-specific onsets")] = only
+        for label, row in operating_ci(y, node, rule, cands).items():
+            operating_rows[(f"anticipation {h}", label)] = row
         for subset, m in [
             ("all rows", np.ones(len(y), bool)),
             ("node idle now", idle_rows),
@@ -292,6 +350,7 @@ def main() -> None:
     diag_t = pd.DataFrame(diag).T
     paired_t = pd.DataFrame(paired_rows).T
     paired_t.index.names = ["task", "model", "onsets"]
+    operating_t = pd.DataFrame(operating_rows).T
     md = (
         "# Baselines and diagnostics\n\n"
         f"{len(nodes)} nodes. Idle level = 10th percentile of a node's total power over its "
@@ -313,11 +372,15 @@ def main() -> None:
         "Pooled AUC on subsets of the test rows, by whether the node is idle at the time of "
         "prediction. `share of onsets` = fraction of all test onsets in that subset.\n\n"
         + diag_t.to_markdown(floatfmt=".3f")
-        + "\n\n## Is a model better than the one-feature low-power rule?\n\n"
+        + "\n\n## Is a model better than the best single-feature rule?\n\n"
         "Paired comparison on the same nodes and rows: per-node ROC-AUC of the model minus that of "
         "the rule, averaged over nodes, with a bootstrap 95% CI over nodes (2000 resamples). A "
         "CI that excludes 0 means the model is better (or worse) than the rule beyond node-to-node "
-        "noise.\n\n" + paired_t.to_markdown() + "\n"
+        "noise.\n\n" + paired_t.to_markdown() + "\n\n## False alerts at the same recall\n\n"
+        "Alerts per node-day needed to catch 25% of the test onsets (threshold read off the test "
+        "scores), for the rule and for each model. The CI is a paired bootstrap over nodes (500 "
+        "resamples) of the rule's count minus the model's; positive means the model raises fewer "
+        "false alerts.\n\n" + operating_t.to_markdown(floatfmt=".2f") + "\n"
     )
     (ROOT / "benchmarks" / "baselines.md").write_text(md)
     print(md)
