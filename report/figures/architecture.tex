@@ -1,0 +1,23 @@
+\begin{tikzpicture}[
+  node distance=6mm,
+  box/.style={draw, rounded corners=2pt, minimum height=10mm, minimum width=22mm, align=center, font=\footnotesize, fill=blue!15},
+  topic/.style={box, fill=green!15},
+  store/.style={box, fill=orange!18},
+  engine/.style={box, fill=yellow!25},
+  viz/.style={box, fill=purple!15},
+  arr/.style={-{Stealth[length=2mm]}, thick}]
+  \node[box] (data) {Data\\[-2pt]{\scriptsize M100 Parquet}};
+  \node[box, right=of data] (etl) {ETL\\[-2pt]{\scriptsize reshape \& label}};
+  \node[topic, right=of etl] (kafka) {Kafka\\[-2pt]{\scriptsize event stream}};
+  \node[engine, above right=3mm and 9mm of kafka] (spark) {Spark\\[-2pt]{\scriptsize hourly aggregates}};
+  \node[box, below right=3mm and 9mm of kafka] (det) {Online detectors\\[-2pt]{\scriptsize anomaly scores}};
+  \node[store, right=21mm of $(spark)!0.5!(det)$] (db) {TimescaleDB\\[-2pt]{\scriptsize storage}};
+  \node[viz, right=of db] (graf) {Grafana\\[-2pt]{\scriptsize dashboard}};
+  \draw[arr] (data) -- (etl);
+  \draw[arr] (etl) -- (kafka);
+  \draw[arr] (kafka.east) -- ++(3.5mm,0) |- (spark.west);
+  \draw[arr] (kafka.east) -- ++(3.5mm,0) |- (det.west);
+  \draw[arr] (spark.east) -- ++(3.5mm,0) |- (db.west);
+  \draw[arr] (det.east) -- ++(3.5mm,0) |- (db.west);
+  \draw[arr] (db) -- (graf);
+\end{tikzpicture}

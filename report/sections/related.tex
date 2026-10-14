@@ -1,0 +1,11 @@
+\section{Related Work}
+\label{sec:related}
+\textbf{Dataset.} M100 ExaData \cite{borghesi2023m100} is a public collection of Marconi100 monitoring data. I use its per-node, 15-minute aggregated release with a Nagios-derived label. The authors report an AUC of 0.57 for one node with a recurrent autoencoder.
+
+\textbf{Anomaly detection on HPC telemetry.} Borghesi et al.\ \cite{borghesi2019autoencoder} train autoencoders on normal behaviour of each node. RUAD \cite{molan2023ruad} replaces the dense autoencoder with an LSTM encoder, trains without labels, and reports an AUC of 0.767 on all 980 nodes using 462 features that include CPU, memory and network load and labels cleaned with operator tickets. Neither the cleaned labels nor the system-level metrics are in the public release.
+
+\textbf{Anticipation.} GRAAFE \cite{molan2024graafe} predicts whether a node will be drained within a future window, with a rack-level graph neural network that reaches an AUC of 0.91 at one hour and 0.78 at six hours on the public data, against 0.61--0.64 for per-node baselines at one hour. I follow its label definition and evaluation protocol (\cref{sec:setup}).
+
+\textbf{Streaming analytics.} Rettig et al.\ \cite{rettig2015online} compute relative entropy and Pearson correlation over Kafka and Spark to detect anomalies in telecom streams. I adapt both to numeric telemetry. Half-space trees \cite{tan2011hst} are the standard streaming anomaly detector and are available in CapyMOA \cite{gomes2025capymoa} and River \cite{montiel2021river}. For concept drift I use ADWIN \cite{bifet2007adwin}, DDM \cite{gama2004ddm} and OPTWIN \cite{tosi2024optwin}.
+
+\textbf{This work} differs in evaluating a deployed streaming path end to end, in reporting trivial baselines selected without test data, and in using paired comparisons that separate real gains from node-to-node noise.

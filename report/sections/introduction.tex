@@ -1,0 +1,16 @@
+\section{Introduction}
+\label{sec:intro}
+Large supercomputers are monitored continuously, and operators care most about whether each compute node is available. A node that the scheduler drains (for a fault, a configuration problem or maintenance) cannot run jobs until it is returned to service. Detecting such states, and ideally anticipating them, from the telemetry the machines already produce is therefore a recurring goal of operational data analytics \cite{molan2023ruad,molan2024graafe}.
+
+Most published detectors are evaluated offline on batches of data, with protocols that vary between papers, and rarely against trivial baselines. Streaming deployments are usually described as systems, without a statistical evaluation of what the models achieve. This report puts both in one place: a complete streaming pipeline built on Kafka and Spark \cite{kreps2011kafka,armbrust2018structured}, run on real telemetry from CINECA's Marconi100 \cite{borghesi2023m100}, and evaluated carefully on a long history of the same machine.
+
+I ask three research questions:
+\begin{itemize}
+  \item \textbf{RQ1} Can a streaming pipeline process real HPC telemetry reliably and with low latency?
+  \item \textbf{RQ2} Can unsupervised detectors find drained nodes?
+  \item \textbf{RQ3} Can drains be anticipated in a streaming setting?
+\end{itemize}
+
+The contributions are: (i) an open pipeline with idempotent aggregation, two independent consumers of one topic and a pluggable detector interface that runs unchanged in the stream and in batch mode; (ii) an evaluation on 146 nodes over 2.5 years with independent events, bootstrap intervals and paired tests, including trivial baselines that are chosen on training data only; (iii) the finding that the label is only weakly explained by telemetry beyond idleness, which explains why generic unsupervised detectors fail and limits what supervised models achieve.
+
+\emph{Scope.} The public data are 15-minute aggregates (four points per hour and node), so this is not a high-frequency sensor stream. I use the stream to exercise a realistic architecture, not to claim sub-minute detection.

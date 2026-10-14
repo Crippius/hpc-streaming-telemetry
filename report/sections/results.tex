@@ -1,0 +1,166 @@
+\section{Results}
+\label{sec:results}
+
+\pgfplotstableset{col sep=comma}
+\subsection{Experimental setup}
+\label{sec:setup}
+\textbf{Data and labels.} I use the per-node release of M100 ExaData \cite{borghesi2023m100}: one Parquet file per node with 15-minute windows, the average, standard deviation, minimum and maximum of each IPMI metric, and a Nagios label from the scheduler-availability check, which reports whether the scheduler can place jobs on the node (\cref{tab:nagios}). The check runs every 15 minutes and always records a state: 87.2\% of the 12.35\,M node-windows in the evaluation set carry an explicit OK, 2.0\% critical and 0.04\% unknown. The remaining 10.7\% have no label. They occur in whole blocks (March--April 2020 entirely, 91\% of March 2021) and are excluded from every metric.
+
+\begin{table}[t]
+\caption{Nagios state of the scheduler-availability check.}
+\label{tab:nagios}
+\centering\small
+\begin{tabular}{cp{6.4cm}}
+\toprule
+State & Meaning \\
+\midrule
+0 & OK: the node can accept jobs \\
+2 & Critical: drained or unavailable to the scheduler (the anomaly label) \\
+3 & Unknown: the check could not determine the state; 39 timestamps, only during cluster-wide events, counted as anomalous \\
+missing & Unmonitored: no label, excluded \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Slices.} \Cref{tab:setup} lists the data used. The streaming replay covers four weeks of the three downloaded racks. For evaluation over a long history I read only the label columns of all 49 racks (857 nodes) with HTTP range requests and kept the 8 racks with the most independent events, 146 nodes in total. These racks were selected on label counts over the whole history, so event rates are higher than for a random rack.
+
+\begin{table}[t]
+\caption{Data slices. Windows are monitored node-windows.}
+\label{tab:setup}
+\centering\small
+\begin{tabular}{p{1.5cm}p{6.3cm}}
+\toprule
+Use & Content \\
+\midrule
+Stream replay & 49 nodes (racks 10--12), 2020-06-14 to 2020-07-12, 6.32\,M events (48 values per node and window) \\
+Detection & 146 nodes. Train 2020-03 to 08, validation (thresholds) 2020-09 to 12, test 2021-01 to 2022-09: 8.01\,M windows, 2.16\% drained, 517 independent events \\
+Anticipation & 146 nodes, chronological 80/20 split, test 2022-03-26 to 2022-09-28: 1,313 onsets at 1\,h among 2.54\,M rows (base rate 0.05\%), 1,242 at 6\,h \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Events and metrics.} An \emph{event} is a run of at least four consecutive drained windows on a node preceded by a normal window; onsets at the same timestamp within one rack count once. An onset is \emph{cluster-wide} when at least half of the eligible nodes have an onset at the same window, and \emph{node-specific} otherwise; 70\% of the 1\,h test onsets are cluster-wide. I report ROC-AUC pooled over nodes and as the per-node median or mean, PR-AUC, precision and F1 at the threshold with the best validation F1, and for anticipation the number of false alerts per node-day at a fixed recall. Intervals are bootstrap 95\% intervals over nodes. Models are compared with \emph{paired} per-node AUC differences, which cancel node-to-node variation.
+
+\textbf{Single-feature rule.} As a training-free baseline I score each window by one raw feature. The feature and its sign are chosen \emph{on training data only}, among all 48 features, by mean per-node AUC; this picks $-$\texttt{p0\_mem\_power\_std} for detection, $-$\texttt{total\_power\_max} for anticipation at 1\,h and $-$\texttt{gpu0\_core\_temp\_avg} at 6\,h. A rule that I first hand-picked ($-$total power) after inspecting all data scores 0.728 and 0.654 at 1\,h and 6\,h, slightly better than the selected one; it is shown separately as an optimistic reference.
+
+\subsection{Pipeline (RQ1)}
+\label{sec:pipeline}
+\Cref{tab:pipeline} reports three replays of the event stream on one machine (single broker, Spark in local mode, 5-second micro-batches), each on a fresh stack. The producer sustains 74\,k messages/s. Spark keeps up at every rate: a micro-batch of $\sim$380\,k rows takes 1.9\,s, results land in TimescaleDB 3.3\,s (median) and 5.9\,s (p95) after publish, and the job finishes within 3--5\,s of the producer. Most of that latency is the 5-second trigger interval.
+
+\begin{table*}[t]
+\caption{Throughput and latency at three replay rates (fresh stack per run). Detector lag is scoring time minus publish time.}
+\label{tab:pipeline}
+\centering\small
+\input{results/tab_pipeline}
+\end{table*}
+
+The Python detector service is the bottleneck: its lag is 0.8\,s at 12\,k msg/s but grows to 14\,s at 47\,k and 76\,s at 74\,k msg/s, identically for a half-space-tree and a label-based detector, so the cost is decoding and vector reassembly, not scoring. The topic has eight partitions, so several detector instances could share the nodes.
+
+\emph{Restart.} I killed Spark about 75 s into a full replay and restarted it 15 s later. It resumed from its checkpoint, worked off the backlog in 500\,k-row batches and, compared with an independent recomputation, produced exactly the expected 1,580,544 hourly windows with no missing, extra or duplicated key and no differing count, average, minimum or maximum.
+
+\subsection{Detecting drained nodes (RQ2)}
+\label{sec:detection}
+\Cref{tab:detection} compares generic unsupervised detectors with the references on the test period. All six unsupervised detectors are poor: per-node median AUC at most 0.59, pooled AUC between 0.34 and 0.51, F1 at most 0.055. Relative entropy and Pearson, with Rettig et al.'s thresholds, flag 90--98\% of all windows. Half-space trees from CapyMOA are the best, and the peer-relative variants do not help.
+
+\begin{table*}[t]
+\caption{Detection of the current state, test 2021-01 to 2022-09. AUC is pooled, per-node AUC is the median over 146 nodes; F1 uses the best validation threshold.}
+\label{tab:detection}
+\centering\small
+\input{results/tab_detection}
+\end{table*}
+
+Every unsupervised detector is clearly worse than the single-feature rule in the paired test, by 0.25 to 0.39 per-node AUC (winning on 0--3\% of nodes). The supervised GBT is better than the rule by +0.047 [+0.039, +0.055], winning on 90\% of nodes. This holds against the stronger hand-picked power rule as well (+0.04): the GBT wins on all 8 racks and in 15--16 of 20 test months, and three training seeds differ by 0.002.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\columnwidth, height=4.4cm, xlabel={total power / node idle level}, ylabel={share of windows},
+  xmin=0.8, xmax=3, ymin=0, ymax=0.6, legend style={font=\scriptsize, at={(0.97,0.95)}, anchor=north east},
+  tick label style={font=\scriptsize}, label style={font=\footnotesize}, every axis plot/.append style={thick}]
+\addplot[cmodel, const plot, mark=none] table[col sep=comma, x=x, y=normal] {results/power_hist.csv};
+\addplot[crule, const plot, mark=none] table[col sep=comma, x=x, y=drained] {results/power_hist.csv};
+\legend{normal, drained}
+\draw[dashed, gray] (axis cs:1.1,0) -- (axis cs:1.1,0.6);
+\end{axis}
+\end{tikzpicture}
+\caption{Power relative to each node's idle level (10th percentile of training windows) in normal and drained test windows; the last bin collects values above 3. The dashed line marks the idle band (110\%).}
+\label{fig:power}
+\end{figure}
+
+\emph{Why.} \Cref{fig:power} shows that 73\% of drained windows sit at idle power, against 6\% of normal windows. The converse is weak: of all idle windows only 21\% are drained, about ten times the base rate but far from decisive, and 79\% are nodes that are available and simply have no jobs. Power ranks windows well but cannot classify them: even the supervised GBT reaches only 33\% precision at 39\% recall. Density-based detectors rank \emph{busy} windows, which are heterogeneous, as more unusual than the dense idle mode where drained nodes sit.
+
+\emph{RUAD replication.} A per-node LSTM autoencoder on all 352 aggregates of 32 random nodes scores a pooled AUC of 0.569 (per-node mean 0.606), which reproduces the 0.57 that the dataset authors report for this public release and is far below the 0.767 of the original paper, which uses non-public features and cleaned labels. On the same nodes and windows, CapyMOA half-space trees score 0.726, but across all 146 nodes they score 0.45 pooled (0.59 per-node median), so a sample of 32 nodes is misleading.
+
+\subsection{Anticipating drains (RQ3)}
+\label{sec:anticipation}
+\Cref{tab:anticipation} gives the main results at 1\,h and 6\,h with the paired difference to the training-selected rule.
+
+\begin{table*}[t]
+\caption{Anticipation of drains within 1\,h and 6\,h. AUC is the mean per-node AUC with bootstrap 95\% interval; $\Delta$ is the paired difference to the best single-feature rule$^a$ (all onsets, 1\,h); alerts are false alerts per node-day at 25\% recall. $^a$ chosen on training data ($-$total\_power\_max at 1\,h, $-$gpu0\_core\_temp\_avg at 6\,h). $^b$ chosen after inspecting all data, optimistic.}
+\label{tab:anticipation}
+\centering\small
+\input{results/tab_anticipation}
+\end{table*}
+
+\emph{Baselines.} The rule reaches 0.721 at 1\,h and 0.637 at 6\,h. A GBT given only total-power statistics does worse (0.695), a sign of the shift between the training and test years.
+
+\emph{Offline model.} GBT on telemetry and peer deviations reaches 0.739 [0.726, 0.753] at 1\,h, better than the rule by +0.018 [+0.004, +0.032], and 0.665 at 6\,h (+0.028 [+0.007, +0.049]). Its clearest advantage is at the top of the ranking: to catch 25\% of onsets one hour ahead it raises 1.06 false alerts per node-day against 4.90 for the rule (paired difference +3.84 [+2.17, +4.22]), i.e.\ a precision of 1.2\%, 23 times the base rate.
+
+\emph{Streaming.} Never retrained, the model is worse than the rule (0.604; 13 alerts). Refit every four weeks it reaches 0.717, statistically tied with the rule in AUC ($-$0.005 [$-$0.017, +0.007]) but with 1.15 alerts per node-day (+3.75 [+2.05, +4.12]). Triggering the refit with ADWIN, DDM or OPTWIN (0.729, 0.724, 0.723) gives the same AUC and 1.3--1.4 alerts, with 33, 52 and 58 retrains against 29 for the schedule (\cref{fig:retrains}): drift detection does not beat a fixed schedule here. Incremental trees fail (AUC 0.33--0.53).
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\columnwidth, height=3.6cm, xlabel={year}, ytick={1,2,3,4}, yticklabels={OPTWIN, DDM, ADWIN, every 4 weeks},
+  ymin=0.4, ymax=4.6, xmin=2020.4, xmax=2022.8, tick label style={font=\scriptsize}, label style={font=\footnotesize},
+  scaled x ticks=false, xticklabel style={/pgf/number format/.cd, fixed, precision=0}, xtick={2021,2022}]
+\addplot[only marks, mark=|, mark size=3pt, thick, cmodel] table[col sep=comma, x=decyear, y=y] {results/retrains.csv};
+\draw[dashed, crule] (axis cs:2022.23,0.4) -- (axis cs:2022.23,4.6) node[above left, font=\scriptsize, crule] {test};
+\end{axis}
+\end{tikzpicture}
+\caption{Retraining times of the four policies. Drift detectors fire in bursts, mostly around maintenance events, and more often than the schedule without a gain.}
+\label{fig:retrains}
+\end{figure}
+
+\emph{Node-specific onsets.} Removing cluster-wide onsets leaves 392 (1\,h) and 321 (6\,h) onsets. Here no learned model is better than the rule: the offline model scores 0.710 against 0.731 at 1\,h ($-$0.020 [$-$0.054, +0.016]) and 0.562 against 0.667 at 6\,h ($-$0.106 [$-$0.153, $-$0.058]) (\cref{tab:featuresets} lists the other feature sets). Calendar features alone fall below chance for node-specific onsets (0.373 at 6\,h), consistent with learning the maintenance schedule.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\columnwidth, height=4.2cm, xlabel={recall of onsets}, ylabel={false alerts / node-day}, ymode=log,
+  xmin=0, xmax=1, legend style={font=\scriptsize, at={(0.97,0.05)}, anchor=south east},
+  tick label style={font=\scriptsize}, label style={font=\footnotesize}, every axis plot/.append style={thick}]
+\addplot[cmodel, mark=none] table[col sep=comma, x=recall, y=model] {results/operating_curve.csv};
+\addplot[crule, mark=none] table[col sep=comma, x=recall, y=rule] {results/operating_curve.csv};
+\addplot[cgrey, dashed, mark=none] table[col sep=comma, x=recall, y=random] {results/operating_curve.csv};
+\legend{GBT, rule, random}
+\end{axis}
+\end{tikzpicture}
+\caption{False alerts per node-day needed to reach a given recall of 1\,h onsets. The rule's curve is flat at low recall because many idle windows tie at the same value.}
+\label{fig:operating}
+\end{figure}
+
+\begin{table*}[t]
+\caption{Offline GBT by feature set: mean per-node AUC for all and node-specific onsets.}
+\label{tab:featuresets}
+\centering\small
+\input{results/tab_featuresets}
+\end{table*}
+
+\emph{Operating point and stability.} \Cref{fig:operating} shows the cost of recall: half of the onsets cost about 14 alerts per node-day (precision 0.18\%), so the model is a risk ranking rather than an alarm. Results also depend strongly on which events fall in the test period (\cref{fig:monthly}): the pooled AUC of the offline model at 1\,h ranges from 0.54 to 0.98 across months, and months dominated by cluster-wide drains are not uniformly easy (0.98 and 0.93 in March and May, 0.64 and 0.54 in July and September).
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, bar width=5pt, width=\columnwidth, height=4.2cm, ylabel={pooled AUC}, ymin=0.4, ymax=1.0,
+  xtick=data, xticklabels from table={results/monthly_auc.csv}{label}, x tick label style={font=\scriptsize},
+  tick label style={font=\scriptsize}, label style={font=\footnotesize},
+  legend style={font=\scriptsize, at={(0.98,0.96)}, anchor=north east}]
+\addplot[fill=cmodel, draw=none] table[col sep=comma, x expr=\coordindex, y=auc_tp_1h] {results/monthly_auc.csv};
+\addplot[fill=crule, draw=none] table[col sep=comma, x expr=\coordindex, y=auc_tp_6h] {results/monthly_auc.csv};
+\legend{1\,h, 6\,h}
+\end{axis}
+\end{tikzpicture}
+\caption{Pooled AUC of the offline GBT per test month (2022). Asterisks mark months in which at least half of the onsets belong to cluster-wide events.}
+\label{fig:monthly}
+\end{figure}

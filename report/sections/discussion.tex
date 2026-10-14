@@ -1,0 +1,11 @@
+\section{Discussion}
+\label{sec:discussion}
+\textbf{What the label measures.} The Nagios state records a scheduler decision, not a telemetry anomaly. Drained nodes are almost always idle, but most idle nodes are available, so the information that separates the two lies outside the node's own metrics (reservations, maintenance windows, administrative action). That caps what telemetry can do: even a supervised model with all telemetry and peer deviations reaches 33\% precision. Earlier work reports higher numbers when labels are cleaned with operator tickets and when system-level load metrics are available \cite{molan2023ruad}; my replication on the public release shows that neither is in the public data.
+
+\textbf{Unsupervised detection (RQ2).} Generic detectors score deviation from the dense regime, and the regime that contains drained nodes is the densest one, so tuning cannot fix them. The ``low power'' rule beats them by a wide margin without any training.
+
+\textbf{Anticipation (RQ3).} Learned models do not improve overall AUC much over the best single feature, and are no better for node-specific drains, but they improve the top of the ranking: about four times fewer false alerts at 25\% recall one hour ahead. Retraining is necessary (a model that is never refitted is worse than the rule), yet a fixed schedule is as good as drift detectors, which on rare, bursty positives mostly react to maintenance events.
+
+\textbf{Threats to validity.} (i) One test period of six months: intervals are over nodes and do not cover other periods, and monthly AUC varies from 0.54 to 0.98. (ii) Racks were selected for many events, and the headline feature set was selected among feature sets compared on the test period, so the offline row is mildly optimistic; the streaming policies were not tuned. (iii) The alert thresholds are read off test scores. (iv) The data are 15-minute aggregates from one machine, with one broker and Spark in local mode in the pipeline measurements.
+
+\textbf{Future work.} Heavy-tailed, per-node lateness with outages and a watermark sweep would show the completeness/state trade-off, which the replay only exercises with small fixed delays. Synthetic anomalies with known onsets would complement the scheduler label, and graph models over the rack layout \cite{molan2024graafe} are the obvious next detector.

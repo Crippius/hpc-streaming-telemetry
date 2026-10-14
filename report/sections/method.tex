@@ -1,0 +1,37 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{Streaming pipeline}
+\Cref{fig:arch} shows the architecture. An ETL step converts each node's wide Parquet rows (one per 15 minutes, with avg/std/min/max of every metric and the Nagios label) into long events $(\text{node}, t, \text{metric}, \text{stat}, \text{value}, \text{state}, \text{anomaly flag})$. The metric list is configuration only; I use 12 metrics $\times$ 4 statistics = 48 values per node and window. A producer replays all nodes merged in event-time order at a configurable rate, serialises with Avro and a schema registry, and keys every message by node so that one partition preserves each node's order. The Kafka record timestamp is the publish time, which makes end-to-end latency measurable.
+
+\begin{figure*}[t]
+\centering
+\input{figures/architecture}
+\caption{Architecture. Two independent consumer groups read the same topic. Spark computes event-time aggregates and the detector service scores nodes; both write to TimescaleDB, which Grafana reads.}
+\label{fig:arch}
+\end{figure*}
+
+\emph{Aggregation.} A Spark Structured Streaming job decodes the Confluent wire format (it strips the 5-byte header and fails if the schema id is not the expected one) and computes one-hour tumbling windows per (node, metric, stat) in event time, with a 30-minute watermark, i.e.\ two source samples. Results are written in update mode: every micro-batch is bulk-loaded into a staging table and merged with \texttt{INSERT \dots ON CONFLICT DO UPDATE}, so a restart that replays a batch produces the same rows.
+
+\emph{Detection.} The detector service is a second consumer group on the same topic. It rebuilds the 48-value vector of each node and timestamp from the individual events, releasing a timestamp when all nodes are complete, when a node has moved three windows past it, or when a node has been silent for 30 s, and forward-fills values missing from late events. Detectors score each vector and then learn from it (prequential evaluation); scores go to TimescaleDB and flags to a second topic.
+
+\subsection{Detectors}
+All detectors implement one interface, \texttt{step(vectors, states)} $\to$ scores, and run unchanged in the Kafka service and in a batch mode that reads Parquet (used for the 2.5-year evaluation). Each node has its own model and its own online threshold.
+\begin{itemize}
+  \item \textbf{Half-space trees} \cite{tan2011hst} from CapyMOA and from River (10 trees, depth 8, window 96), on min-max scaled features, with a variant that feeds each node's deviation from the cluster median.
+  \item \textbf{Relative entropy and Pearson correlation} after Rettig et al.\ \cite{rettig2015online}: the Kullback--Leibler divergence between value histograms of adjacent 16-window blocks, and the correlation of a node with the cluster median. I adopt the paper's thresholds (a multiple of the baseline mean, and mean plus $k\sigma$).
+  \item \textbf{RUAD replication}: a per-node LSTM autoencoder (window of 10) on all 352 aggregates, trained without labels.
+\end{itemize}
+Thresholds of every detector are also calibrated on a validation period for the F1 comparison. I add three references: \emph{always OK}, the best \emph{single-feature rule}, and a supervised \emph{gradient-boosted trees} (GBT) model \cite{friedman2001gbm,pedregosa2011sklearn} trained on the current label as a ceiling.
+
+\subsection{Drain anticipation}
+Following GRAAFE \cite{molan2024graafe}, a node at time $t$ is positive when it is drained in $(t, t{+}h]$ with $h\in\{1\,\text{h},6\,\text{h}\}$; rows whose previous row is already positive are removed, so only drains \emph{entering} the horizon count (\cref{fig:task}). Features are the current 48 values, their changes over 1\,h and 6\,h, and deviations from the cluster and rack medians. The model is a histogram-based GBT trained on all positives and 5\% of negatives.
+
+\begin{figure}[t]
+\centering
+\input{figures/task}
+\caption{Anticipation task and delayed labels. The label of the row at $t$ is only known $h$ windows later; the streaming model learns each example at that point.}
+\label{fig:task}
+\end{figure}
+
+In the stream, features seen at $t$ are kept until $t{+}h$, when the live Nagios states reveal the label, and the example is then learned. I compare four policies for refitting the GBT on all resolved examples so far: never, every four weeks, and when a drift detector (ADWIN, DDM or OPTWIN) fires on the class-balanced prequential error, at most once a week. Incremental trees (River's adaptive random forest and Hoeffding adaptive tree, CapyMOA's adaptive random forest) serve as pure online alternatives.

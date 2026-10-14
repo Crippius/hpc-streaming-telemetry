@@ -1,0 +1,3 @@
+\section{Conclusion}
+\label{sec:conclusion}
+The Kafka--Spark pipeline replays and aggregates real HPC telemetry at 74\,k messages/s with seconds of latency and restarts without losing or duplicating data (RQ1). Generic unsupervised detectors miss drained nodes because they sit in the dense idle mode; a single feature chosen on training data and a supervised model both do far better, but precision is bounded at about one third because most idle nodes are not drained (RQ2). Drains can be anticipated one hour ahead with a streaming model learned from delayed labels and retrained on a schedule; it matches the best single-feature rule in AUC and needs about four times fewer false alerts at equal recall, but is no better for node-specific drains (RQ3).

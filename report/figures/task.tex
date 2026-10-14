@@ -1,0 +1,15 @@
+\begin{tikzpicture}[x=1cm, y=1cm, font=\footnotesize]
+  \draw[-{Stealth[length=2mm]}, thick] (0,0) -- (8.2,0) node[below left] {time};
+  \fill[gray!35] (5,0) rectangle (7,0.5);
+  \node at (6,0.25) {drained};
+  \draw[decorate, decoration={brace, amplitude=3pt, mirror}] (3.6,-0.12) -- (4.95,-0.12)
+    node[midway, below=3pt, align=center] {rows with\\$y=1$};
+  \draw[decorate, decoration={brace, amplitude=3pt, mirror}] (5.05,-0.12) -- (7,-0.12)
+    node[midway, below=3pt, align=center] {dropped\\(rising-edge rule)};
+  \node[circle, fill=cmodel, inner sep=1.5pt, label=above:{features at $t$}] (t) at (0.9,0) {};
+  \node[circle, fill=cmodel, inner sep=1.5pt, label=above:{$t{+}h$}] (th) at (2.3,0) {};
+  \draw[{Stealth[length=1.6mm]}-{Stealth[length=1.6mm]}, cmodel] (0.9,0.75) -- (2.3,0.75)
+    node[midway, above] {$h$};
+  \node[align=left, anchor=west] at (0,1.55) {label known at $t{+}h$ $\Rightarrow$ the example is learned};
+  \draw[dashed, gray] (3.6,0) -- (3.6,0.5) node[above, font=\scriptsize, gray] {$h$ before drain};
+\end{tikzpicture}
