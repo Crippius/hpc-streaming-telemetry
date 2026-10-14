@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 
 import numpy as np
 
-from producer.melt import ANOMALY_STATES
+from producer.etl import ANOMALY_STATES
 from streaming.detectors.base import Detector, RollingQuantile
 
 LAGS = (4, 24)

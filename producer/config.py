@@ -19,8 +19,8 @@ def load_config(path: Path | None = None) -> dict:
     return cfg
 
 
-def melt_hash(cfg: dict) -> str:
-    """Hash of the config fields that determine the melted cache."""
+def etl_hash(cfg: dict) -> str:
+    """Hash of the config fields that determine the event cache."""
     keys = ("time_range", "metrics", "stats")
     blob = json.dumps({k: cfg[k] for k in keys}, sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]

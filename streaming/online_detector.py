@@ -15,7 +15,7 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer, AvroSerialize
 from confluent_kafka.serialization import MessageField, SerializationContext
 
 from producer.config import load_config
-from producer.melt import ANOMALY_STATES
+from producer.etl import ANOMALY_STATES
 from streaming.detectors import build
 
 WINDOW_MS = 15 * 60 * 1000

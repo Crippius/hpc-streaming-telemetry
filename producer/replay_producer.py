@@ -1,4 +1,4 @@
-"""Replay the melted M100 events into Kafka in event-time order, compressed in wall-clock time."""
+"""Replay the M100 events into Kafka in event-time order, compressed in wall-clock time."""
 
 import argparse
 import csv

@@ -1,4 +1,4 @@
-"""Wide per-node parquet -> long event format, cached per node in `long_dir`."""
+"""ETL: wide per-node Parquet (metrics and Nagios labels) -> long events, cached per node."""
 
 import io
 import json
@@ -7,7 +7,7 @@ import tarfile
 import pandas as pd
 import pyarrow.parquet as pq
 
-from producer.config import load_config, melt_hash, node_members
+from producer.config import etl_hash, load_config, node_members
 
 ANOMALY_STATES = {2, 3}  # 2 = critical, 3 = unknown during cluster-wide incidents
 LONG_COLUMNS = ["node_id", "event_time", "metric", "stat", "value", "nagios_state", "is_anomaly"]
@@ -29,7 +29,7 @@ def check_metrics(columns, metrics: list[str], stats: list[str], node_id: str) -
         )
 
 
-def melt_frame(
+def to_events(
     wide: pd.DataFrame, node_id: str, metrics: list[str], stats: list[str]
 ) -> pd.DataFrame:
     check_metrics(wide.columns, metrics, stats, node_id)
@@ -66,7 +66,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = out_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-    h = melt_hash(cfg)
+    h = etl_hash(cfg)
     start, end = (pd.Timestamp(cfg["time_range"][k]) for k in ("start", "end"))
     members = node_members(cfg["raw_dir"])
 
@@ -78,7 +78,7 @@ def main() -> None:
             print(f"{node}: cached ({n} events)")
         else:
             wide = read_wide(*members[node], start, end)
-            long = melt_frame(wide, node, cfg["metrics"], cfg["stats"])
+            long = to_events(wide, node, cfg["metrics"], cfg["stats"])
             long.to_parquet(path, index=False)
             manifest[node] = h
             manifest_path.write_text(json.dumps(manifest, indent=2))

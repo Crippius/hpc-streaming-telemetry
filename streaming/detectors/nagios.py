@@ -1,6 +1,6 @@
 """Label-based references: not detectors of the telemetry, yardsticks for the ones that are."""
 
-from producer.melt import ANOMALY_STATES
+from producer.etl import ANOMALY_STATES
 from streaming.detectors.base import Fixed, PerNodeDetector
 
 
